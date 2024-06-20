@@ -409,18 +409,13 @@ async function resolveDependenciesOfImporters (
       const postponedPeersResolutionQueue: PostponedPeersResolutionFunction[] = []
       const pkgAddresses: PkgAddress[] = []
 
-      const resolvedDependenciesOfImporter = await Promise.all(
-        extendedWantedDeps.map((extendedWantedDep) => resolveDependenciesOfDependency(
+      const resolvedDependenciesOfImporter = await Promise.all(extendedWantedDeps.map(extendedWantedDep =>
+        resolveDependenciesOfImporterDependency({
           ctx,
-          importer.preferredVersions,
-          {
-            ...importer.options,
-            parentPkgAliases: importer.parentPkgAliases,
-            pickLowestVersion: pickLowestVersion && !importer.updatePackageManifest,
-          },
-          extendedWantedDep
-        ))
-      )
+          extendedWantedDep,
+          importer,
+          pickLowestVersion,
+        })))
 
       for (const { resolveDependencyResult, postponedPeersResolution, postponedResolution } of resolvedDependenciesOfImporter) {
         if (resolveDependencyResult) {
@@ -509,6 +504,26 @@ async function resolveDependenciesOfImporters (
     publishedBy,
     time,
   }
+}
+
+export interface ResolveDependenciesOfImporterDependencyOpts {
+  readonly ctx: ResolutionContext
+  readonly importer: ImporterToResolve
+  readonly extendedWantedDep: ExtendedWantedDependency
+  readonly pickLowestVersion: boolean
+}
+
+async function resolveDependenciesOfImporterDependency ({ ctx, extendedWantedDep, importer, pickLowestVersion }: ResolveDependenciesOfImporterDependencyOpts) {
+  return resolveDependenciesOfDependency(
+    ctx,
+    importer.preferredVersions,
+    {
+      ...importer.options,
+      parentPkgAliases: importer.parentPkgAliases,
+      pickLowestVersion: pickLowestVersion && !importer.updatePackageManifest,
+    },
+    extendedWantedDep
+  )
 }
 
 function filterMissingPeersFromPkgAddresses (
