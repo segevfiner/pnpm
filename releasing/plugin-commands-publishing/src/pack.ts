@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { createGzip } from 'zlib'
+import { type CatalogResolver, resolveFromCatalog } from '@pnpm/catalogs.resolver'
 import { PnpmError } from '@pnpm/error'
 import { types as allTypes, type UniversalOptions, type Config } from '@pnpm/config'
 import { readProjectManifest } from '@pnpm/cli-utils'
@@ -58,7 +59,7 @@ export function help (): string {
 }
 
 export async function handler (
-  opts: Pick<UniversalOptions, 'dir'> & Pick<Config, 'ignoreScripts' | 'rawConfig' | 'embedReadme' | 'packGzipLevel' | 'nodeLinker'> & Partial<Pick<Config, 'extraBinPaths' | 'extraEnv'>> & {
+  opts: Pick<UniversalOptions, 'dir'> & Pick<Config, 'catalogs' | 'ignoreScripts' | 'rawConfig' | 'embedReadme' | 'packGzipLevel' | 'nodeLinker'> & Partial<Pick<Config, 'extraBinPaths' | 'extraEnv'>> & {
     argv: {
       original: string[]
     }
@@ -98,11 +99,13 @@ export async function handler (
     throw new PnpmError('PACKAGE_VERSION_NOT_FOUND', `Package version is not defined in the ${manifestFileName}.`)
   }
   const tarballName = `${manifest.name.replace('@', '').replace('/', '-')}-${manifest.version}.tgz`
+  const catalogResolver = resolveFromCatalog.bind(null, opts.catalogs ?? {})
   const publishManifest = await createPublishManifest({
     projectDir: dir,
     modulesDir: path.join(opts.dir, 'node_modules'),
     manifest,
     embedReadme: opts.embedReadme,
+    catalogResolver,
   })
   const files = await packlist(dir, {
     packageJsonCache: {
@@ -202,8 +205,13 @@ async function createPublishManifest (opts: {
   embedReadme?: boolean
   modulesDir: string
   manifest: ProjectManifest
+  catalogResolver: CatalogResolver
 }): Promise<ProjectManifest> {
-  const { projectDir, embedReadme, modulesDir, manifest } = opts
+  const { projectDir, embedReadme, modulesDir, manifest, catalogResolver } = opts
   const readmeFile = embedReadme ? await readReadmeFile(projectDir) : undefined
-  return createExportableManifest(projectDir, manifest, { readmeFile, modulesDir })
+  return createExportableManifest(projectDir, manifest, {
+    catalogResolver,
+    readmeFile,
+    modulesDir,
+  })
 }

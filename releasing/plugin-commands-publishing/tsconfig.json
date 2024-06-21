@@ -16,6 +16,10 @@
       "path": "../../__utils__/test-ipc-server"
     },
     {
+    {
+      "path": "../../catalogs/resolver"
+    },
+    {
       "path": "../../cli/cli-utils"
     },
     {
