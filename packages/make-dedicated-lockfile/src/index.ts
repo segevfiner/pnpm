@@ -36,7 +36,16 @@ export async function makeDedicatedLockfile (lockfileDir: string, projectDir: st
   await writeWantedLockfile(projectDir, dedicatedLockfile)
 
   const { manifest, writeProjectManifest } = await readProjectManifest(projectDir)
-  const publishManifest = await createExportableManifest(projectDir, manifest)
+  const publishManifest = await createExportableManifest(projectDir, manifest, {
+    catalogResolver: (wantedDependency) => {
+      // Since @pnpm/make-dedicated-lockfile is deprecated, avoid supporting new features like pnpm catalogs.
+      if (wantedDependency.pref.startsWith('catalog:')) {
+        throw new Error(`@pnpm/make-dedicated-lockfile does not support projects that use the catalog protocol. Encountered catalog protocol for dependency ${wantedDependency.alias} at: ${projectDir}`)
+      }
+
+      return ({ type: 'unused' })
+    },
+  })
   await writeProjectManifest(publishManifest)
 
   const modulesDir = path.join(projectDir, 'node_modules')
