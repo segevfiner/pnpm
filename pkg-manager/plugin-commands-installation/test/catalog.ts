@@ -337,12 +337,24 @@ test('lockfile catalog snapshots retain existing entries on --filter', async () 
   })
 })
 
-test('lockfile catalog snapshots should keep unused entries', async () => {
+// If a catalog specifier was used in one or more package.json files and all
+// usages were removed later, we should remove the catalog snapshot from
+// pnpm-lock.yaml. This should happen even if the dependency is still defined in
+// a catalog under pnpm-workspace.yaml.
+//
+// Note that this behavior may not be desirable in all cases. If someone removes
+// the last usage of a catalog entry, and another person adds it back later,
+// that dependency will be re-resolved to a newer version. This is probably
+// desirable most of the time, but there could be a good argument to cache the
+// older unused resolution. For now we'll remove the unused entries since that's
+// what would happen anyway if catalogs aren't used.
+test('lockfile catalog snapshots should remove unused entries', async () => {
   const ctrl = new CatalogTestsController([
     {
       location: 'packages/project1',
       package: {
         dependencies: {
+          'is-negative': 'catalog:',
           'is-positive': 'catalog:',
         },
       },
@@ -352,6 +364,7 @@ test('lockfile catalog snapshots should keep unused entries', async () => {
   await writeYamlFile('pnpm-workspace.yaml', {
     packages: ['packages/*'],
     catalog: {
+      'is-negative': '=1.0.0',
       'is-positive': '=1.0.0',
     },
   })
@@ -359,30 +372,35 @@ test('lockfile catalog snapshots should keep unused entries', async () => {
   {
     await ctrl.install()
     const lockfile = await ctrl.lockfile()
-    expect(lockfile.importers['packages/project1' as ProjectId]?.dependencies?.['is-positive']).toEqual({
-      specifier: 'catalog:',
-      version: '1.0.0',
+    expect(lockfile.importers['packages/project1' as ProjectId]?.dependencies).toEqual({
+      'is-negative': { specifier: 'catalog:', version: '1.0.0' },
+      'is-positive': { specifier: 'catalog:', version: '1.0.0' },
     })
     expect(lockfile.catalogs?.default).toStrictEqual({
+      'is-negative': { specifier: '=1.0.0', version: '1.0.0' },
       'is-positive': { specifier: '=1.0.0', version: '1.0.0' },
     })
   }
 
-  await ctrl.updateProjectManifest('packages/project1', { dependencies: { 'is-positive': '=1.0.0' } })
+  // Update package.json to no longer depend on is-positive.
+  await ctrl.updateProjectManifest('packages/project1', {
+    dependencies: {
+      'is-negative': 'catalog:',
+    },
+  })
   await ctrl.install()
 
   {
     const lockfile = await ctrl.lockfile()
-    expect(lockfile.importers['packages/project1' as ProjectId]).toEqual({
-      dependencies: {
-        'is-positive': {
-          specifier: '=1.0.0',
-          version: '1.0.0',
-        },
-      },
+    expect(lockfile.importers['packages/project1' as ProjectId]?.dependencies).toEqual({
+      'is-negative': { specifier: 'catalog:', version: '1.0.0' },
     })
+    // Only "is-negative" should be in the catalogs section of the lockfile
+    // since all packages in the workspace no longer use is-positive. Note that
+    // this should be the case even if pnpm-workspace.yaml still has
+    // "is-positive" configured.
     expect(lockfile.catalogs?.default).toStrictEqual({
-      'is-positive': { specifier: '=1.0.0', version: '1.0.0' },
+      'is-negative': { specifier: '=1.0.0', version: '1.0.0' },
     })
   }
 })
